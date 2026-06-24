@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import SwipeableMessageRow from './SwipeableMessageRow';
 import { scale, moderateScale, verticalScale } from '@/src/utils/scaling';
 import { Box, VStack, Text } from '@/src/components/HOSGluestackUI';
 import FastImage from '@d11/react-native-fast-image';
 import { Alert, TouchableOpacity } from 'react-native';
+import { OptimizedChatGif } from '@/src/components/OptimizedChatGif';
+import { ModernImageViewer } from '@/src/components/ModernImageViewer';
 
 interface ReplyToData {
     messageId: string;
@@ -19,6 +21,7 @@ export interface MessageItem {
     text: string;
     createdAt: any;
     mediaUrl?: string;
+    thumbUrl?: string;
     replyTo?: {
         messageId: string;
         senderId: string;
@@ -27,6 +30,7 @@ export interface MessageItem {
     };
     // 🎯 ADD THIS OPTIONAL TRACKING FIELD HERE
     isDeletedByUser?: boolean;
+    mediaType?: string;
 }
 
 interface ChatMessageBubbleProps {
@@ -40,16 +44,27 @@ interface ChatMessageBubbleProps {
     onDeleteTrigger: (messageId: string, senderId: string) => void;
 }
 
-const ChatMessageBubble = ({ item, currentUserId, timeString, isAdmin, isDeletedByUser, onReplyTrigger, onReplyClick, onDeleteTrigger }: ChatMessageBubbleProps) => {
+const ChatMessageBubble = ({
+    item,
+    currentUserId,
+    timeString,
+    isAdmin,
+    isDeletedByUser,
+    onReplyTrigger,
+    onReplyClick,
+    onDeleteTrigger
+}: ChatMessageBubbleProps) => {
     const isMe = item.senderId === currentUserId;
     const hasReply = !!item.replyTo;
     const isMedia = !!item.mediaUrl;
+    const isGif = item?.mediaType === 'image/gif' || item?.text === '[GIF]';
+    const [viewerVisible, setViewerVisible] = useState(false);
     const getBubbleColor = () => {
         if (isDeletedByUser && isAdmin) return '#7F1D1D'; // Distinct dark red bubble background for Admin viewing deleted content
         return isMe ? '#064E3B' : '#115E59';
     };
-    return (
 
+    return (
         <VStack style={{ alignItems: isMe ? 'flex-end' : 'flex-start', marginBottom: verticalScale(12) }}>
             <SwipeableMessageRow isMe={isMe} onReplyTrigger={() => onReplyTrigger(item)}>
                 <TouchableOpacity
@@ -58,8 +73,12 @@ const ChatMessageBubble = ({ item, currentUserId, timeString, isAdmin, isDeleted
                         setTimeout(() => {
                             return onDeleteTrigger(item.id, item.senderId);
                         }, 100);
-                    }
-                    }
+                    }}
+                    onPress={() => {
+                        if (isMedia) {
+                            setViewerVisible(true); // Open Awesome-Gallery view tray layout
+                        }
+                    }}
                     delayLongPress={400}
                     activeOpacity={0.9}
                     style={{ maxWidth: '75%', alignItems: isMe ? 'flex-end' : 'flex-start' }}
@@ -78,10 +97,9 @@ const ChatMessageBubble = ({ item, currentUserId, timeString, isAdmin, isDeleted
                         borderColor: isMe ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'
                     }}>
 
-                        {/* 🎯 NESTED WHATSAPP REPLAY DECORATOR */}
+                        {/* 🎯 NESTED WHATSAPP REPLY DECORATOR */}
                         {hasReply && item.replyTo && (
                             <TouchableOpacity
-                                // 🎯 When tapped, pass the original message ID up to the list view controller
                                 onPress={() => onReplyClick(item.replyTo!.messageId)}
                                 activeOpacity={0.9}
                                 style={{
@@ -105,32 +123,53 @@ const ChatMessageBubble = ({ item, currentUserId, timeString, isAdmin, isDeleted
                         )}
 
                         {isMedia ? (
-                            /* 🎬 MEDIA VIEW LAYOUT TRAY (GIFs) */
+                            /* 🎬 MEDIA VIEW LAYOUT TRAY BLOCK SWITCHER */
                             <Box style={{ position: 'relative', marginTop: hasReply ? scale(4) : 0 }}>
-                                <FastImage
-                                    source={{ uri: item.mediaUrl! }}
-                                    style={{ width: scale(220), height: verticalScale(180) }}
-                                    resizeMode={FastImage.resizeMode.cover}
-                                />
-                                <Box style={{
-                                    position: 'absolute',
-                                    bottom: scale(6),
-                                    right: scale(8),
-                                    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-                                    paddingHorizontal: scale(6),
-                                    paddingVertical: verticalScale(2),
-                                    borderRadius: scale(10),
-                                }}>
-                                    <Text style={{ fontSize: moderateScale(11), color: 'rgba(255, 255, 255, 0.8)' }}>
-                                        {timeString}
-                                    </Text>
-                                </Box>
+                                {isGif ? (
+                                    /* 🚀 TARGET 1: Feed variables right down into the custom GIF layout wrapper */
+                                    <OptimizedChatGif
+                                        mediaUrl={item.mediaUrl!}
+                                        thumbUrl={item.thumbUrl || item.mediaUrl!}
+                                        timeString={timeString}
+                                        isMe={isMe}
+                                    />
+                                ) : (
+                                    /* 📸 TARGET 2: Normal picture view layout (Keeps standard absolute bottom right positioning safely) */
+                                    <Box style={{ position: 'relative' }}>
+                                        <FastImage
+                                            source={{ uri: item.mediaUrl! }}
+                                            style={{ width: scale(220), height: verticalScale(180) }}
+                                            resizeMode={FastImage.resizeMode.cover}
+                                        />
+
+                                        {/* Static Photo Timestamp Marker */}
+                                        <Box style={{
+                                            position: 'absolute',
+                                            bottom: scale(6),
+                                            right: scale(8),
+                                            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+                                            paddingHorizontal: scale(6),
+                                            paddingVertical: verticalScale(2),
+                                            borderRadius: scale(10),
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            gap: scale(4)
+                                        }}>
+                                            <Text style={{ fontSize: moderateScale(11), color: 'rgba(255, 255, 255, 0.8)' }}>
+                                                {timeString}
+                                            </Text>
+                                            {/* {isMe && (
+                                                <Text style={{ fontSize: moderateScale(11), color: '#34B7F1' }}>
+                                                    ✓✓
+                                                </Text>
+                                            )} */}
+                                        </Box>
+                                    </Box>
+                                )}
                             </Box>
                         ) : (
                             /* 💬 WHATSAPP ANTI-OVERLAP TEXT LAYOUT ENGINE */
                             <VStack style={{ minWidth: scale(70) }}>
-                                {/* Render Reply info here if hasReply is true */}
-
                                 <Box
                                     style={{
                                         flexDirection: 'row',
@@ -139,12 +178,10 @@ const ChatMessageBubble = ({ item, currentUserId, timeString, isAdmin, isDeleted
                                         justifyContent: 'flex-end'
                                     }}
                                 >
-                                    {/* Message Body Text */}
                                     <Text
                                         style={{
                                             fontSize: moderateScale(15),
                                             color: 'white',
-                                            // Safe right padding space so trailing long text lines don't collide with checkmarks
                                             paddingRight: scale(65),
                                             lineHeight: verticalScale(20),
                                             alignSelf: 'flex-start',
@@ -155,7 +192,6 @@ const ChatMessageBubble = ({ item, currentUserId, timeString, isAdmin, isDeleted
                                         {item.text}
                                     </Text>
 
-                                    {/* Status Metadata Layer */}
                                     <Box
                                         style={{
                                             position: 'absolute',
@@ -164,23 +200,17 @@ const ChatMessageBubble = ({ item, currentUserId, timeString, isAdmin, isDeleted
                                             flexDirection: 'row',
                                             alignItems: 'center',
                                             gap: scale(3),
-                                            paddingTop: verticalScale(4) // Extra breathing space top gap fallback
+                                            paddingTop: verticalScale(4)
                                         }}
                                     >
-                                        <Text
-                                            style={{
-                                                fontSize: moderateScale(10),
-                                                color: 'rgba(255, 255, 255, 0.5)',
-                                            }}
-                                        >
+                                        <Text style={{ fontSize: moderateScale(10), color: 'rgba(255, 255, 255, 0.5)' }}>
                                             {timeString}
                                         </Text>
-
-                                        {isMe && (
+                                        {/* {isMe && (
                                             <Text style={{ fontSize: moderateScale(12), color: '#34B7F1' }}>
                                                 ✓✓
                                             </Text>
-                                        )}
+                                        )} */}
                                     </Box>
                                 </Box>
                             </VStack>
@@ -188,6 +218,11 @@ const ChatMessageBubble = ({ item, currentUserId, timeString, isAdmin, isDeleted
                     </Box>
                 </TouchableOpacity>
             </SwipeableMessageRow>
+            <ModernImageViewer
+                visible={viewerVisible}
+                imageUrl={item.mediaUrl!}
+                onClose={() => setViewerVisible(false)}
+            />
         </VStack>
     );
 };

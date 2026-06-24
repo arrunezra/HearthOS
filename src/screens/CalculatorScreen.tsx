@@ -83,7 +83,7 @@ export default function CalculatorScreen() {
                 // 👑 1. Read global system feature flags config matrix
                 const configDoc = await getDoc(doc(db, 'system', 'config'));
                 const showUserList = configDoc.data()?.showUserList ?? true;
-                console.log('showUserList', showUserList)
+                //console.log('showUserList', showUserList)
                 if (showUserList == true) {
                     // Toggle is ON -> Show standard directory dashboard list layout
                     navigation.navigate('UserListScreen');

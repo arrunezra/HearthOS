@@ -3,6 +3,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { handleImageCompression, cleanupImage } from '../utils/ImageService';
 import { useAlert } from '../context/AlertContext';
 import apiClient from '../api/axios-interceptors-with-retry'
+import { API_BASE_URL_DEV } from '../utils/environment';
 
 export const useChatAttachment = () => {
     const { showAlert } = useAlert();
@@ -18,7 +19,11 @@ export const useChatAttachment = () => {
         return () => unsubscribe();
     }, []);
 
-    const uploadChatMedia = async (selectedAsset: any, userid: string, roomId: string): Promise<string | null> => {
+    const uploadChatMedia = async (
+        selectedAsset: any,
+        userid: string,
+        displayName: string
+    ): Promise<{ url: string; thumbUrl: string } | null> => {
         if (isOffline) {
             showAlert({
                 type: 'error',
@@ -31,8 +36,7 @@ export const useChatAttachment = () => {
 
         let tempUri: string | undefined;
         // Update this endpoint path to match your PHP file layout (e.g., chat_media_upload.php)
-        const uploadUrl = '/files/chat_media_upload.php';
-
+        const uploadUrl = API_BASE_URL_DEV + '/chats/chat_media_upload.php';
         try {
             setIsUploading(true);
             setUploadProgress(0);
@@ -43,6 +47,7 @@ export const useChatAttachment = () => {
                 mime: selectedAsset.type || 'image/jpeg',
                 filename: selectedAsset.fileName || `chat_${Date.now()}.jpg`,
                 size: selectedAsset.fileSize || 0,
+
             };
 
             // 2. Run compression utility
@@ -57,11 +62,14 @@ export const useChatAttachment = () => {
                 uri: compressed.uri,
                 type: compressed.type,
                 name: compressed.name,
+
             } as any);
 
             uploadData.append('uri', compressed.uri);
             uploadData.append('userid', userid);
-            uploadData.append('room_id', roomId); // Useful if your backend separates media folder streams by room
+            uploadData.append('displayName', displayName);
+            uploadData.append('gifFrom', selectedAsset?.gifFrom || "");
+
 
             // 4. Dispatch the payload via your custom API engine setup
             const response = await apiClient.post(uploadUrl, uploadData, {
@@ -73,20 +81,31 @@ export const useChatAttachment = () => {
                     }
                 }
             });
-
+            console.log('Server Raw Response Target:', response);
             // 5. Read back response parameters sent by your PHP script
-            if (response.data && response.data.success) {
-                // Assuming your PHP script returns the web location inside response.data.url
-                return response.data.url;
+            if (response && response.data.success) {
+                return {
+                    url: response.data.url,
+                    thumbUrl: response.data.thumbUrl || response.data.url
+                };
             } else {
-                throw new Error(response.data.message || "File upload transaction rejected by server.");
+                // Safely grab backend error message if available
+                const backendErrorMessage = response?.data?.message || "File upload transaction rejected by server.";
+                throw new Error(backendErrorMessage);
             }
 
         } catch (error: any) {
+            console.log('Caught Hook Execution Error:', error);
+
+            // 🎯 THE FIX: Deep-defend against undefined error property lookups
+            const finalAlertMessage = error?.response?.data?.message  // If it's an Axios network error payload
+                || error?.message                                     // If it's a standard JS error object
+                || "A network connection or server processing error occurred.";
+
             showAlert({
                 type: 'error',
                 title: 'Attachment Error',
-                message: error.message || "Something went wrong. Please try again.",
+                message: finalAlertMessage, // 🚀 Will never be undefined or crash again
                 confirmText: "OK"
             });
             return null;

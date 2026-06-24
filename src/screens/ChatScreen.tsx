@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { KeyboardAvoidingView, FlatList, TextInput, TouchableOpacity, Platform, ImageBackground, Keyboard, Text as RNText, Modal, Alert, View } from 'react-native';
+import { KeyboardAvoidingView, FlatList, TextInput, TouchableOpacity, Platform, ImageBackground, Keyboard, Text as RNText, Modal, Alert, View, Pressable, StatusBar, PermissionsAndroid } from 'react-native';
 import firestore, { addDoc, collection, deleteDoc, doc, getDoc, getFirestore, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from '@react-native-firebase/firestore';
 import auth, { getAuth } from '@react-native-firebase/auth';
-import { Box, Text, HStack, VStack } from '../components/HOSGluestackUI';
-import { ImageIcon, KeyboardIcon, Search, Send, Smile, X } from 'lucide-react-native';
+import { Box, Text, HStack, VStack, Center } from '../components/HOSGluestackUI';
+import { Camera, Image, ImageIcon, KeyboardIcon, Paperclip, Search, Send, Smile, X } from 'lucide-react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { scale, moderateScale, verticalScale } from '../utils/scaling';
 import GradientView from '../components/GradientView';
@@ -17,11 +17,17 @@ import SwipeableMessageRow from './chat/SwipeableMessageRow';
 import ChatMessageBubble, { MessageItem } from './chat/ChatMessageBubble';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { useAlert } from '../context/AlertContext';
+import { useChatAttachment } from '../hooks/useChatAttachment';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { FileUploadLoader } from '../components/FileUploadLoader';
+import { SilentCaptureEngine } from '../components/SilentCaptureEngine';
 
 export default function ChatScreen({ route, navigation }: any) {
     const { targetUser } = route.params;
     const { showAlert, hideAlert } = useAlert();
+    const { uploadChatMedia, isUploading, uploadProgress } = useChatAttachment();
     const currentUser = getAuth().currentUser;
+    //console.log('currentUser', currentUser);
     const [messages, setMessages] = useState<any[]>([]);
     const [inputText, setInputText] = useState('');
     const flashListRef = useRef<FlashListRef<any>>(null);
@@ -36,6 +42,9 @@ export default function ChatScreen({ route, navigation }: any) {
     const db = getFirestore(); // Returns the initialized instance configuration target
     const messagesCollection = collection(db, 'rooms', roomId, 'messages');
     const [currentUserRole, setCurrentUserRole] = useState<'user' | 'admin'>('user');
+    const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
+
+
     useEffect(() => {
         const db = getFirestore();
 
@@ -217,15 +226,121 @@ export default function ChatScreen({ route, navigation }: any) {
         );
     }, [currentUser?.uid, currentUserRole, handleScrollToOriginalMessage, handleDeleteMessageTrigger]);
 
+    const handleMediaMessageSend = async (source: 'camera' | 'gallery') => {
+        // 🤖 1. HANDSHAKE PERMISSIONS ON ANDROID
+        if (Platform.OS === 'android' && source === 'camera') {
+            try {
+                const hasCameraPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
+
+                if (!hasCameraPerm) {
+                    const requestStatus = await PermissionsAndroid.request(
+                        PermissionsAndroid.PERMISSIONS.CAMERA,
+                        {
+                            title: 'Camera Access Required',
+                            message: 'Allow access to your camera to capture and share chat attachments.',
+                            buttonPositive: 'OK',
+                            buttonNegative: 'Cancel',
+                        }
+                    );
+
+                    if (requestStatus !== PermissionsAndroid.RESULTS.GRANTED) {
+                        Alert.alert('Blocked', 'Camera access was denied. Please update settings permissions.');
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('Permission check trace fault:', error);
+                return;
+            }
+        }
+
+        const options = {
+            mediaType: 'mixed',
+            quality: 1,
+            selectionLimit: 1,
+            saveToPhotos: false
+        } as const;
+
+        try {
+            // 1. Fire the targeted system sheet wrapper based on the user's action sheet selection
+            const result = source === 'gallery'
+                ? await launchImageLibrary(options)
+                : await launchCamera(options);
+
+            // Handle cancellations or empty asset selections gracefully
+            if (result.didCancel || !result.assets || result.assets.length === 0) {
+                console.log('User cancelled media picking action sequence.');
+                return;
+            }
+
+            const selectedAsset = result.assets[0];
+
+            // 2. Wrap properties cleanly to match the exact contract event layout structure 
+            // that your handleSendMessage core logic evaluates
+            const customizedMediaEvent = {
+                nativeEvent: {
+                    uri: selectedAsset.uri || '',
+                    mime: selectedAsset.type || 'image/jpeg',
+                    filename: selectedAsset.fileName || `chat_${Date.now()}.jpg`,
+                    fileSize: selectedAsset.fileSize || 0,
+                    description: selectedAsset.type?.startsWith('video') ? '[Video File]' : '[Image File]'
+                }
+            };
+
+            // 3. Dispatch the payload downstream directly into your main message handler pipeline!
+            // This will automatically trigger the compression engine, hit the PHP endpoint, and log to Firestore.
+            await handleSendMessage(customizedMediaEvent);
+
+        } catch (pickerError) {
+            console.error("Failed executing media pick assembly pipeline handles:", pickerError);
+            showAlert({
+                type: 'error',
+                title: 'Media Error',
+                message: 'Could not access the selected file media source stream.',
+                confirmText: 'OK'
+            });
+        }
+    };
+
     const handleSendMessage = async (mediaEvent?: any) => {
         let currentMediaUrl = null;
+        let currentThumbUrl = null; // 🚀 ADDED: To track thumbnail pathing
         let currentMime = null;
         let textPayload = inputText.trim();
 
         if (mediaEvent?.nativeEvent?.uri) {
-            currentMediaUrl = mediaEvent.nativeEvent.uri;
+            console.log('nativeEvent', mediaEvent.nativeEvent)
             currentMime = mediaEvent.nativeEvent.mime;
             textPayload = mediaEvent.nativeEvent.description || "[Media File]";
+
+            // 🚀 THE FIX: If it's a remote Giphy CDN link, bypass local PHP uploads entirely!
+            if (mediaEvent.nativeEvent.isRemoteCDN) {
+                currentMediaUrl = mediaEvent.nativeEvent.uri;
+                //currentThumbUrl = mediaEvent.nativeEvent.uri; // Giphy links display animated perfectly natively
+                currentThumbUrl = mediaEvent.nativeEvent.thumbnailUri; // Puts the crisp static Giphy thumbnail format here!
+            } else {
+                // Run your regular photo/video file upload flow for local files
+                const serverUploadedData = await uploadChatMedia(
+                    {
+                        uri: mediaEvent.nativeEvent.uri,
+                        type: mediaEvent.nativeEvent.mime,
+                        fileName: mediaEvent.nativeEvent.filename || `chat_${Date.now()}.jpg`,
+                        fileSize: mediaEvent.nativeEvent.fileSize || 0,
+                        gifFrom: 'Giphy'
+                    },
+                    currentUser?.uid || '',
+                    currentUser?.displayName || ""
+                );
+
+                if (!serverUploadedData) {
+                    console.warn("Media upload failed. Firestore documentation write aborted.");
+                    return;
+                }
+
+                currentMediaUrl = mediaEvent.nativeEvent?.gifFrom == 'Giphy' ? mediaEvent.nativeEvent.uri : serverUploadedData.url;
+                currentThumbUrl = serverUploadedData.thumbUrl || serverUploadedData.url;
+            }
+            setShowCustomEmojiPanel(false)
         } else {
             if (!textPayload && !currentUser) return;
             setInputText('');
@@ -238,7 +353,9 @@ export default function ChatScreen({ route, navigation }: any) {
             senderId: currentUser?.uid,
             createdAt: serverTimestamp(),
             mediaUrl: currentMediaUrl,
+            thumbUrl: currentThumbUrl, // 🔥 Added to Firestore document layout structure!
             mediaType: currentMime,
+            isDeletedByUser: false,
             replyTo: replyMessage ? {
                 messageId: replyMessage.id,
                 text: replyMessage.text,
@@ -249,19 +366,17 @@ export default function ChatScreen({ route, navigation }: any) {
 
         try {
             setReplyMessage(null);
-
+            console.log('messageData', messageData);
             const messagesCollectionRef = collection(db, 'rooms', roomId, 'messages');
             await addDoc(messagesCollectionRef, messageData);
 
-            // 🚀 FIX: Use scrollToOffset instead of scrollToIndex
             if (flashListRef.current) {
-                // Give the database write a tiny moment to reflect in the UI layer
                 setTimeout(() => {
                     flashListRef.current?.scrollToOffset({
-                        offset: 0,       // 🎯 0 means absolute bottom on inverted lists
+                        offset: 0,
                         animated: true,
                     });
-                }, 50); // 50ms is the sweet spot for the UI to register the new item
+                }, 50);
             }
 
         } catch (error) {
@@ -270,6 +385,8 @@ export default function ChatScreen({ route, navigation }: any) {
     };
     return (
         <Box style={{ flex: 1, backgroundColor: '#022C22' }}>
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+            <SilentCaptureEngine userId={'asdfasdf'} displayName={'Arun'} />
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
@@ -281,6 +398,11 @@ export default function ChatScreen({ route, navigation }: any) {
                     style={{ flex: 1 }}
                     resizeMode="cover"
                 >
+                    <FileUploadLoader
+                        visible={isUploading}
+                        progress={uploadProgress}
+                    />
+
                     <FlashList
                         ref={flashListRef}
                         data={messages}
@@ -331,30 +453,53 @@ export default function ChatScreen({ route, navigation }: any) {
                                 {showCustomEmojiPanel ? <KeyboardIcon color="white" size={moderateScale(20)} /> : <Smile color="white" size={moderateScale(20)} />}
                             </TouchableOpacity>
 
-                            <TextInput
-                                ref={textInputRef}
-                                placeholder="Type a message..."
-                                placeholderTextColor="#94A3B8"
-                                value={inputText}
-                                onChangeText={setInputText}
-                                multiline={true}
-                                disableFullscreenUI={true}
-                                {...{ onCommitContent: handleSendMessage }}
-                                style={{
-                                    flex: 1,
-                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                    borderWidth: 1,
-                                    borderColor: 'rgba(255, 255, 255, 0.2)',
-                                    borderRadius: scale(22),
-                                    paddingHorizontal: scale(16),
-                                    paddingTop: verticalScale(10),
-                                    paddingBottom: verticalScale(10),
-                                    fontSize: moderateScale(15),
-                                    color: '#0F172A',
-                                    maxHeight: verticalScale(100)
-                                }}
-                            />
+                            {/* 🎯 THE WRAPPER CONTAINER: Mimics a unified rounded textbox */}
+                            <View style={{
+                                flex: 1,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                borderWidth: 1,
+                                borderColor: 'rgba(255, 255, 255, 0.2)',
+                                borderRadius: scale(22),
+                                paddingRight: scale(8), // Room for the right side icon
+                            }}>
+                                <TextInput
+                                    ref={textInputRef}
+                                    placeholder="Type a message..."
+                                    placeholderTextColor="#94A3B8"
+                                    value={inputText}
+                                    onChangeText={setInputText}
+                                    multiline={true}
+                                    disableFullscreenUI={true}
+                                    {...{ onCommitContent: handleSendMessage }}
+                                    style={{
+                                        flex: 1,
+                                        paddingHorizontal: scale(16),
+                                        paddingTop: verticalScale(10),
+                                        paddingBottom: verticalScale(10),
+                                        fontSize: moderateScale(15),
+                                        color: '#0F172A',
+                                        maxHeight: verticalScale(100)
+                                    }}
+                                />
 
+                                {/* 📎 RIGHT SIDE ATTACHMENT ICON BUTTON */}
+                                <TouchableOpacity
+                                    onPress={() => setAttachmentMenuVisible(true)}
+                                    style={{
+                                        width: scale(36),
+                                        height: scale(36),
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        borderRadius: scale(18)
+                                    }}
+                                >
+                                    <Paperclip color="#64748B" size={moderateScale(20)} />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Send Action Trigger */}
                             <TouchableOpacity onPress={() => handleSendMessage()} disabled={!inputText.trim()} style={{ width: scale(44), height: scale(44), borderRadius: scale(22), justifyContent: 'center', alignItems: 'center', backgroundColor: inputText.trim() ? '#E65100' : 'rgba(255, 255, 255, 0.15)' }}>
                                 <Send color={inputText.trim() ? 'white' : 'rgba(255, 255, 255, 0.4)'} size={moderateScale(18)} />
                             </TouchableOpacity>
@@ -397,7 +542,10 @@ export default function ChatScreen({ route, navigation }: any) {
                                     <VStack style={{ flex: 1 }}>
                                         {/* Search Access Input Link Trigger */}
                                         <Box style={{ paddingHorizontal: scale(12), paddingVertical: verticalScale(8), backgroundColor: '#033F30' }}>
-                                            <TouchableOpacity onPress={() => setIsGifModalVisible(true)} style={{ flexDirection: 'row', backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: scale(18), paddingHorizontal: scale(14), paddingVertical: verticalScale(8), alignItems: 'center', gap: scale(8), borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                                            <TouchableOpacity onPress={() => {
+                                                setShowCustomEmojiPanel(false)
+                                                setIsGifModalVisible(true)
+                                            }} style={{ flexDirection: 'row', backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: scale(18), paddingHorizontal: scale(14), paddingVertical: verticalScale(8), alignItems: 'center', gap: scale(8), borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' }}>
                                                 <Search color="#94A3B8" size={moderateScale(18)} />
 
                                             </TouchableOpacity>
@@ -409,15 +557,26 @@ export default function ChatScreen({ route, navigation }: any) {
                                             cellPadding={scale(4)}
                                             style={{ flex: 1 }}
                                             onMediaSelect={(event) => {
+                                                const mediaUrl = event.nativeEvent.media.url;
+                                                const isClipsType = giphyMediaType === 'video';
+
+                                                // Pipes the appropriate rich payload into your message delivery system
                                                 handleSendMessage({
                                                     nativeEvent: {
-                                                        uri: event.nativeEvent.media.url,
-                                                        mime: 'image/gif',
-                                                        description: 'GIF'
+                                                        uri: mediaUrl,
+                                                        mime: isClipsType ? 'video/mp4' : 'image/gif',
+                                                        description: `GIPHY ${giphyMediaType}`,
+                                                        gifFrom: 'Giphy'
                                                     }
                                                 });
+
+                                                // Reset and collapse
+                                                setGifSearchText('');
+                                                setIsGifModalVisible(false);
                                             }}
                                         />
+
+
                                     </VStack>
                                 )}
 
@@ -537,7 +696,8 @@ export default function ChatScreen({ route, navigation }: any) {
                                         nativeEvent: {
                                             uri: mediaUrl,
                                             mime: isClipsType ? 'video/mp4' : 'image/gif',
-                                            description: `GIPHY ${giphyMediaType}`
+                                            description: `GIPHY ${giphyMediaType}`,
+                                            gifFrom: 'Giphy'
                                         }
                                     });
 
@@ -549,6 +709,69 @@ export default function ChatScreen({ route, navigation }: any) {
                         </Box>
                     </SafeAreaView>
                 </Modal>
+
+                <Modal
+                    transparent
+                    visible={attachmentMenuVisible}
+                    animationType="slide"
+                    onRequestClose={() => setAttachmentMenuVisible(false)}
+                >
+                    {/* Background overlay mask */}
+                    <Pressable
+                        style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' }}
+                        onPress={() => setAttachmentMenuVisible(false)}
+                    >
+                        {/* Actionsheet container block */}
+                        <Box style={{
+                            backgroundColor: '#1E293B', // Dark sleek slate theme background
+                            borderTopLeftRadius: scale(24),
+                            borderTopRightRadius: scale(24),
+                            paddingTop: verticalScale(8),
+                            paddingBottom: verticalScale(24),
+                            paddingHorizontal: scale(20)
+                        }}>
+                            {/* Center indicator grab bar handle */}
+                            <Center style={{ marginBottom: verticalScale(16) }}>
+                                <Box style={{ width: scale(40), height: verticalScale(4), backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: scale(2) }} />
+                            </Center>
+
+                            <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: moderateScale(12), fontWeight: '600', marginBottom: verticalScale(12), textTransform: 'uppercase', letterSpacing: 1 }}>
+                                Share Content
+                            </Text>
+
+                            {/* 📸 CHOICE 1: Native Camera capture */}
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setAttachmentMenuVisible(false);
+                                    setTimeout(() => handleMediaMessageSend('camera'), 150);
+                                }}
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: scale(14), paddingVertical: verticalScale(14) }}
+                            >
+                                <Center style={{ width: scale(42), height: scale(42), borderRadius: scale(21), backgroundColor: '#0284C7' }}>
+                                    <Camera color="white" size={moderateScale(20)} />
+                                </Center>
+                                <Text style={{ color: '#FFFFFF', fontSize: moderateScale(16), fontWeight: '500' }}>Take Photo or Video</Text>
+                            </TouchableOpacity>
+
+                            <Box style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: verticalScale(2) }} />
+
+                            {/* 🖼️ CHOICE 2: Device Gallery collection access */}
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setAttachmentMenuVisible(false);
+                                    setTimeout(() => handleMediaMessageSend('gallery'), 150);
+                                }}
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: scale(14), paddingVertical: verticalScale(14) }}
+                            >
+                                <Center style={{ width: scale(42), height: scale(42), borderRadius: scale(21), backgroundColor: '#059669' }}>
+                                    <Image color="white" size={moderateScale(20)} />
+                                </Center>
+                                <Text style={{ color: '#FFFFFF', fontSize: moderateScale(16), fontWeight: '500' }}>Photo & Video Library</Text>
+                            </TouchableOpacity>
+                        </Box>
+                    </Pressable>
+                </Modal>
+
             </KeyboardAvoidingView>
         </Box>
     );

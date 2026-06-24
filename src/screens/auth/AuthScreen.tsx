@@ -76,7 +76,7 @@ export default function AuthScreen() {
                 lastLogin: serverTimestamp(),
             }, { merge: true });
 
-            console.log('finalRole', finalRole);
+            // console.log('finalRole', finalRole);
 
             // 5. Root Navigation router handling with Config Checking
             if (finalRole === 'admin') {

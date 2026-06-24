@@ -37,7 +37,7 @@ export default function App() {
 
     // 2. Pass the instance directly into the modular listener wrapper
     const subscriber = onAuthStateChanged(authInstance, (currentUser) => {
-      console.log('currentUser updated:', currentUser);
+      //console.log('currentUser updated:', currentUser);
       setUser(currentUser);
 
       if (initializing) {

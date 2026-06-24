@@ -16,9 +16,11 @@ interface RetryableRequestConfig extends InternalAxiosRequestConfig {
 
 // Response data structure (customize based on your API)
 interface ApiResponse<T = any> {
-    data: T;
-    status: string;
+    success?: boolean;
+    data?: T;
+    status?: string;
     message?: string;
+    [key: string]: any; // Allow root level properties from standard PHP outputs
 }
 
 // Error response structure
@@ -117,7 +119,7 @@ class AxiosInterceptorManager {
         config.headers['X-Request-ID'] = requestId;
 
         // Log request for debugging
-        if (NODE_ENV === 'development') {
+        if (NODE_ENV as string === 'development') {
             console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, {
                 headers: config.headers,
                 params: config.params,
@@ -137,9 +139,9 @@ class AxiosInterceptorManager {
         return Promise.reject(error);
     }
 
-    private handleResponse<T = any>(response: AxiosResponse<T>): T | Promise<T> {
+    private handleResponse(response: AxiosResponse): any {
         // Log response for debugging
-        if (NODE_ENV === 'development') {
+        if (NODE_ENV as string === 'development') {
             console.log(`[API Response] ${response.config.url}`, {
                 status: response.status,
                 data: response.data,
@@ -148,7 +150,7 @@ class AxiosInterceptorManager {
         }
 
         // Handle specific response formats
-        const responseData = response.data as ApiResponse<T>;
+        const responseData = response.data as ApiResponse;
 
         // Check for API error in response
         if (responseData && typeof responseData === 'object' && 'status' in responseData) {
@@ -157,11 +159,11 @@ class AxiosInterceptorManager {
             }
             // Return the data directly if it's wrapped
             if ('data' in responseData) {
-                return responseData.data as T;
+                return responseData.data;
             }
         }
 
-        return response.data;
+        return response;
     }
 
     private handleResponseError(error: AxiosError): Promise<never> {
