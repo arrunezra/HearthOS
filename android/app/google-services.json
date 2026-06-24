@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "450020064775",
+    "project_id": "hearthos-7492c",
+    "storage_bucket": "hearthos-7492c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:450020064775:android:696c480b45b7bcaa5774a2",
+        "android_client_info": {
+          "package_name": "com.hearthos"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "450020064775-2t6p257454fpeb0hpppe4d4jl6001u0n.apps.googleusercontent.com",
+          "client_type": 3,
+          "android_info": {
+            "package_name": "com.hearthos",
+            "certificate_hash": "2f1811aface05040c49b9361f17b7463d63a967c"
+          }
+        },
+        {
+          "client_id": "450020064775-1mhqiii163mmgnjm0ic4pq7vsb20s37a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCAAqj0OqRNmz0OuE812AJM-_I3QZ-ePeI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "450020064775-1mhqiii163mmgnjm0ic4pq7vsb20s37a.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
