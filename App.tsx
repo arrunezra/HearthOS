@@ -19,6 +19,7 @@ import ChatScreen from './src/screens/ChatScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { GiphySDK } from '@giphy/react-native-sdk';
 import { AlertProvider } from './src/context/AlertContext';
+import { CustomProvider } from './src/context/CutomProvider';
 export default function App() {
   GiphySDK.configure({ apiKey: '3eYpltnNfxpbEHbBeodZ9EDIId4zVb4B' });
   const [initializing, setInitializing] = useState(true);
@@ -65,22 +66,24 @@ export default function App() {
     <ThemeProvider>
       <SafeAreaProvider>
         <KeyboardProvider>
-          <AlertProvider>
-            <NavigationContainer>
-              <RootStack.Navigator screenOptions={{ headerShown: false }}>
-                <RootStack.Screen name="MainTabs" component={AppNavigator} />
-                <RootStack.Screen
-                  name="AuthScreen"
-                  component={AuthScreen}
-                  options={{ presentation: 'modal' }}
-                />
-                {/* 🎯 3. Shared Target Routes explicitly shared at root level */}
-                <RootStack.Screen name="UserListScreen" component={UserListScreen} />
-                <RootStack.Screen name="ChatScreen" component={ChatScreen} />
-                <RootStack.Screen name="Settings" component={SettingsScreen} />
-              </RootStack.Navigator>
-            </NavigationContainer>
-          </AlertProvider>
+          <CustomProvider>
+            <AlertProvider>
+              <NavigationContainer>
+                <RootStack.Navigator screenOptions={{ headerShown: false }}>
+                  <RootStack.Screen name="MainTabs" component={AppNavigator} />
+                  <RootStack.Screen
+                    name="AuthScreen"
+                    component={AuthScreen}
+                    options={{ presentation: 'modal' }}
+                  />
+                  {/* 🎯 3. Shared Target Routes explicitly shared at root level */}
+                  <RootStack.Screen name="UserListScreen" component={UserListScreen} />
+                  <RootStack.Screen name="ChatScreen" component={ChatScreen} />
+                  <RootStack.Screen name="Settings" component={SettingsScreen} />
+                </RootStack.Navigator>
+              </NavigationContainer>
+            </AlertProvider>
+          </CustomProvider>
         </KeyboardProvider>
       </SafeAreaProvider>
     </ThemeProvider>

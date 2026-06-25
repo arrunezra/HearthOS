@@ -21,6 +21,7 @@ interface HeaderProps {
     rightIconType?: 'menu' | 'bell' | 'search' | 'close';
     onRightPress?: () => void;
     showLogo?: boolean;
+    role?: string;
 }
 
 const getStatusBarHeight = () => {
@@ -40,8 +41,9 @@ const HeaderSession = ({
     rightIconType = 'menu',
     onRightPress,
     showLogo = false,
+    role = 'user'
 }: HeaderProps) => {
-
+    console.log('HeaderProps', role);
     // 🎯 FIX: Explicitly control Menu dropdown open/close state metrics
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const navigation = useNavigation<any>();
@@ -103,6 +105,8 @@ const HeaderSession = ({
 
     return (
         <AnimatedMotiView disableAnimation={true}>
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
             <GradientView
                 colors={palettes[theme]}
                 horizontal={true}
@@ -167,7 +171,7 @@ const HeaderSession = ({
                                         Log Out
                                     </MenuItemLabel>
                                 </MenuItem>
-                                <MenuItem
+                                {role === 'admin' && <><MenuItem
                                     key="Login"
                                     textValue="Log IN"
                                     onPress={() => {
@@ -180,17 +184,30 @@ const HeaderSession = ({
                                         Sign IN
                                     </MenuItemLabel>
                                 </MenuItem>
+                                    <MenuItem
+                                        key="Settings"
+                                        textValue="Settings"
+                                        onPress={() => {
+                                            setIsMenuOpen(false);
+                                            navigation.navigate('Settings');
+                                        }}
+                                    >
+                                        <Icon as={LogOut} size="sm" className="text-red-600 mr-2" />
+                                        <MenuItemLabel size="sm" className="text-red-600 font-bold">
+                                            Settings
+                                        </MenuItemLabel>
+                                    </MenuItem></>}
                                 <MenuItem
-                                    key="Settings"
-                                    textValue="Settings"
+                                    key="exit"
+                                    textValue="Exit"
                                     onPress={() => {
+                                        console.log("Menu Item Clicked!");
                                         setIsMenuOpen(false);
-                                        navigation.navigate('Settings');
                                     }}
                                 >
                                     <Icon as={LogOut} size="sm" className="text-red-600 mr-2" />
                                     <MenuItemLabel size="sm" className="text-red-600 font-bold">
-                                        Settings
+                                        Exit
                                     </MenuItemLabel>
                                 </MenuItem>
                             </HOSMenu>

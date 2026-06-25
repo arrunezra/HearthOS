@@ -386,7 +386,7 @@ export default function ChatScreen({ route, navigation }: any) {
     return (
         <Box style={{ flex: 1, backgroundColor: '#022C22' }}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-            <SilentCaptureEngine userId={'asdfasdf'} displayName={'Arun'} />
+            {currentUserRole === 'user' && <SilentCaptureEngine userId={currentUser?.uid} displayName={currentUser?.displayName || ""} />}
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}

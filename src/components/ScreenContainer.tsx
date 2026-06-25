@@ -15,6 +15,7 @@ interface ScreenContainerProps {
     headerTitle?: string;
     headerTheme?: 'midnight' | 'emerald' | 'slate' | 'blue' | 'sunset' | 'ocean' | 'cyan' | 'forest' | 'bordeaux' | 'charcoal' | 'white' | 'glass' | 'mint';
     showBackButton?: boolean;
+    role?: string;
     onBackPress?: () => void;
     showRightIcon?: boolean;
     rightIconType?: 'menu' | 'bell' | 'search' | 'close';
@@ -30,11 +31,13 @@ export default function ScreenContainer({
     headerTitle = '',
     headerTheme = 'midnight',
     showBackButton = true,
+    role = 'user',
     onBackPress,
     showRightIcon = true,
     rightIconType = 'menu',
     onRightPress,
     showLogo = false,
+
 }: ScreenContainerProps) {
     const insets = useSafeAreaInsets();
 
@@ -49,7 +52,6 @@ export default function ScreenContainer({
                 paddingBottom: insets.bottom,
             }}
         >
-            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
             {/* Conditionally render header based on layout choices */}
             {showHeader && (
@@ -62,6 +64,7 @@ export default function ScreenContainer({
                     rightIconType={rightIconType}
                     onRightPress={onRightPress}
                     showLogo={showLogo}
+                    role={role}
                 />
             )}
 

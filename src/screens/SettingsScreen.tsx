@@ -29,18 +29,27 @@ export default function SettingsScreen() {
     }, []);
 
     const handleToggleSwitch = async (value: boolean) => {
+        // 1. Instantly flip the state locally for smooth UI response
+        setShowUserList(value);
+
         try {
             const configDocRef = doc(db, 'system', 'config');
 
-            // 🎯 FIX: Changed from updateDoc to setDoc with merge: true
             await setDoc(configDocRef, {
                 showUserList: value
             }, { merge: true });
 
             console.log("System config updated successfully.");
-        } catch (error) {
-            Alert.alert("Error", "Failed to update configuration settings property.");
-            console.error(error);
+        } catch (error: any) {
+            // 2. 🚀 THE FIX: Roll back the visual switch state if Firestore blocks the write
+            setShowUserList(!value);
+
+            if (error.code === 'permission-denied') {
+                Alert.alert("Access Denied", "You do not have administrative privileges to modify this configuration.");
+            } else {
+                Alert.alert("Error", "Failed to update configuration settings property.");
+            }
+            console.error("Write unauthorized or broken:", error);
         }
     };
 

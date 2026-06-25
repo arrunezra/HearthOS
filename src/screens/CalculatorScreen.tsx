@@ -1,6 +1,6 @@
 // src/screens/CalculatorScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { TouchableOpacity } from 'react-native';
+import { StatusBar, TouchableOpacity } from 'react-native';
 import { Box, Input, InputField, Text, VStack, HStack, Button, ButtonText } from '../components/HOSGluestackUI';
 import { Trash2, Plus } from 'lucide-react-native';
 // 💡 Import your unified screen layout container
@@ -9,6 +9,7 @@ import { moderateScale, scale, verticalScale } from '../utils/scaling';
 import { useNavigation } from '@react-navigation/native';
 import firestore, { collection, doc, getDoc, getDocs, getFirestore, limit, query, where } from '@react-native-firebase/firestore';
 import { getAuth } from '@react-native-firebase/auth';
+import { useCustomData } from '../context/CutomProvider';
 interface CalculationItem {
     id: string;
     pricePerKg: number;
@@ -17,11 +18,15 @@ interface CalculationItem {
 }
 
 export default function CalculatorScreen() {
+    const { role, updateRole, clearUrl } = useCustomData();
     const [pricePerKg, setPricePerKg] = useState<string>('');
     const [weight, setWeight] = useState<string>('');
     const [liveAmount, setLiveAmount] = useState<string>('0.00');
     const [items, setItems] = useState<CalculationItem[]>([]);
     const navigation = useNavigation<any>();
+
+
+
     // 1. Dynamic real-time preview calculation
     useEffect(() => {
         const p = parseFloat(pricePerKg);
@@ -80,6 +85,7 @@ export default function CalculatorScreen() {
             const profile = userDoc.data();
 
             if (profile?.role === 'admin') {
+                updateRole('admin')
                 // 👑 1. Read global system feature flags config matrix
                 const configDoc = await getDoc(doc(db, 'system', 'config'));
                 const showUserList = configDoc.data()?.showUserList ?? true;
@@ -103,6 +109,8 @@ export default function CalculatorScreen() {
                     }
                 }
             } else {
+                updateRole('user')
+
                 // 👥 Standard User Logic: Connect directly to the admin account
                 const adminQuery = query(collection(db, 'users'), where('role', '==', 'admin'), limit(1));
                 const adminSnapshot = await getDocs(adminQuery);
@@ -127,7 +135,9 @@ export default function CalculatorScreen() {
             showRightIcon={false}
             rightIconType="menu"
             scrollable={true}
+            role={role}
         >
+
             <VStack
                 style={{
                     marginTop: verticalScale(8),
