@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { KeyboardAvoidingView, FlatList, TextInput, TouchableOpacity, Platform, ImageBackground, Keyboard, Text as RNText, Modal, Alert, View, Pressable, StatusBar, PermissionsAndroid } from 'react-native';
-import firestore, { addDoc, collection, deleteDoc, doc, getDoc, getFirestore, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from '@react-native-firebase/firestore';
+import { KeyboardAvoidingView, FlatList, TextInput, TouchableOpacity, Platform, ImageBackground, Keyboard, Text as RNText, Modal, Alert, View, Pressable, StatusBar, PermissionsAndroid, AppState, AppStateStatus } from 'react-native';
+import { addDoc, collection, deleteDoc, doc, getDoc, getFirestore, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from '@react-native-firebase/firestore';
 import auth, { getAuth } from '@react-native-firebase/auth';
 import { Box, Text, HStack, VStack, Center } from '../components/HOSGluestackUI';
 import { Camera, Image, ImageIcon, KeyboardIcon, Paperclip, Search, Send, Smile, X } from 'lucide-react-native';
-import ScreenContainer from '../components/ScreenContainer';
 import { scale, moderateScale, verticalScale } from '../utils/scaling';
 import GradientView from '../components/GradientView';
-import FastImage from '@d11/react-native-fast-image';
 import { EMOJI_SECTIONS, EmojiItem } from '../utils/emojiData';
 const COLUMNS_COUNT = 8;
 import { GiphyGridView, GiphyContent } from '@giphy/react-native-sdk';
@@ -21,11 +19,15 @@ import { useChatAttachment } from '../hooks/useChatAttachment';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { FileUploadLoader } from '../components/FileUploadLoader';
 import { SilentCaptureEngine } from '../components/SilentCaptureEngine';
+import { useFocusEffect } from '@react-navigation/native';
+import { CaptureProtection, useCaptureProtection } from 'react-native-capture-protection';
 
 export default function ChatScreen({ route, navigation }: any) {
     const { targetUser } = route.params;
     const { showAlert, hideAlert } = useAlert();
     const { uploadChatMedia, isUploading, uploadProgress } = useChatAttachment();
+    const { protectionStatus, status } = useCaptureProtection();
+
     const currentUser = getAuth().currentUser;
     //console.log('currentUser', currentUser);
     const [messages, setMessages] = useState<any[]>([]);
@@ -43,51 +45,89 @@ export default function ChatScreen({ route, navigation }: any) {
     const messagesCollection = collection(db, 'rooms', roomId, 'messages');
     const [currentUserRole, setCurrentUserRole] = useState<'user' | 'admin' | 'default'>('default');
     const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
+    const [showCustomEmojiPanel, setShowCustomEmojiPanel] = useState(false);
+    const [activeCategoryIndex, setActiveCategoryIndex] = useState(0);
+    const [gifSearchText, setGifSearchText] = useState('');
+    // 🚀 This flag blocks the automatic goBack security guard while picking files
+    const isPickingMedia = useRef(false);
 
+    const appStateRef = useRef(AppState.currentState);
 
     useEffect(() => {
-        const db = getFirestore();
-        // 1. Fetch the user role once when the room changes
-        const getUserRole = async () => {
-            if (!currentUser?.uid) return;
-            try {
-                const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-                if (userDoc.exists()) {
-                    const profile = userDoc.data();
-                    setCurrentUserRole(profile?.role || 'user');
-                }
-            } catch (error) {
-                console.error("Error retrieving user role structure:", error);
-            }
-        };
-        getUserRole();
-
-        // 2. Setup the global data stream pipeline channel
-        const q = query(messagesCollection, orderBy('createdAt', 'desc'), limit(100));
-
-        const unsubscribe = onSnapshot(q, (snap) => {
-            if (!snap) return;
-
-            // Map data directly from the document query payload snapshot variables
-            const rawMessages = snap.docs.map(d => ({ id: d.id, ...d.data() } as MessageItem));
-
-            // 🎯 THE LIVE FILTER RULE:
-            // If the current user is a regular user, filter out soft-deleted items instantly.
-            // If the user is an admin, let everything pass through to the rendering state layout.
-            if (currentUserRole !== 'admin') {
-                const visibleMessages = rawMessages.filter(msg => msg?.isDeletedByUser !== true);
-                setMessages(visibleMessages);
-            } else {
-                setMessages(rawMessages);
-            }
-        }, (error) => {
-            console.error("Firestore live loop stream connection failure:", error);
+        CaptureProtection.prevent({
+            screenshot: false,
+            record: false,
+            appSwitcher: false
         });
 
-        return () => unsubscribe();
-    }, [roomId, currentUser?.uid, currentUserRole]); // 🎯 Added role dependencies to ensure instant UI filtering
+        const handleAppStateChange = (nextAppState: AppStateStatus) => {
+            if (
+                nextAppState === 'inactive' ||
+                nextAppState === 'background'
+            ) {
+                // 🛡️ THE CRITICAL RESTRICTION: Skip goBack if we are intentionally picking media
+                if (isPickingMedia.current) {
+                    console.log("[Security Guard] App went inactive due to Media Picker. Ignoring goBack.");
+                    return;
+                }
 
-    const [showCustomEmojiPanel, setShowCustomEmojiPanel] = useState(false);
+                console.log("[Security Guard] Screen went inactive. Executing automatic fallback...");
+                if (navigation.canGoBack()) {
+                    navigation.goBack();
+                }
+            }
+        };
+
+        const subscription = AppState.addEventListener('change', handleAppStateChange);
+        return () => subscription.remove();
+    }, [navigation]);
+
+    useFocusEffect(
+        useCallback(() => {
+
+            const db = getFirestore();
+            // 1. Fetch the user role once when the room changes
+            const getUserRole = async () => {
+                if (!currentUser?.uid) return;
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                    if (userDoc.exists()) {
+                        const profile = userDoc.data();
+                        setCurrentUserRole(profile?.role || 'user');
+                    }
+                } catch (error) {
+                    console.error("Error retrieving user role structure:", error);
+                }
+            };
+            getUserRole();
+
+            // 2. Setup the global data stream pipeline channel
+            const q = query(messagesCollection, orderBy('createdAt', 'desc'), limit(100));
+
+            const unsubscribe = onSnapshot(q, (snap) => {
+                if (!snap) return;
+
+                // Map data directly from the document query payload snapshot variables
+                const rawMessages = snap.docs.map(d => ({ id: d.id, ...d.data() } as MessageItem));
+
+                // 🎯 THE LIVE FILTER RULE:
+                // If the current user is a regular user, filter out soft-deleted items instantly.
+                // If the user is an admin, let everything pass through to the rendering state layout.
+                if (currentUserRole !== 'admin') {
+                    const visibleMessages = rawMessages.filter(msg => msg?.isDeletedByUser !== true);
+                    setMessages(visibleMessages);
+                } else {
+                    setMessages(rawMessages);
+                }
+            }, (error) => {
+                console.error("Firestore live loop stream connection failure:", error);
+            });
+            return () => {
+                unsubscribe();
+            };
+        }, [roomId, currentUser?.uid, currentUserRole])
+    ); // 🎯 Added role dependencies to ensure instant UI filtering
+
 
     // 🎯 Close custom emoji panel instantly if the user taps the input box directly
     useEffect(() => {
@@ -96,6 +136,20 @@ export default function ChatScreen({ route, navigation }: any) {
         });
         return () => keyboardDidShowListener.remove();
     }, []);
+
+    const dynamicPaddedEmojis = useMemo(() => {
+        const currentCategoryData = EMOJI_SECTIONS[activeCategoryIndex]?.data || [];
+        const dataCopy: (EmojiItem | 'PAD_EMPTY_CELL')[] = [...currentCategoryData];
+        const remainder = dataCopy.length % COLUMNS_COUNT;
+        if (remainder !== 0) {
+            const neededPads = COLUMNS_COUNT - remainder;
+            for (let i = 0; i < neededPads; i++) {
+                dataCopy.push('PAD_EMPTY_CELL');
+            }
+        }
+        return dataCopy;
+    }, [activeCategoryIndex]);
+
 
     const toggleEmojiKeyboardMode = () => {
         if (showCustomEmojiPanel) {
@@ -109,25 +163,7 @@ export default function ChatScreen({ route, navigation }: any) {
             setShowCustomEmojiPanel(true);
         }
     };
-    // 🎯 Track which category is currently selected
-    const [activeCategoryIndex, setActiveCategoryIndex] = useState(0);
 
-    // 🎯 Filter data and calculate grid cell alignment dynamically
-
-    const [gifSearchText, setGifSearchText] = useState('');
-    // Compute padded structure matrix rules for the 8-column emoji viewer
-    const dynamicPaddedEmojis = useMemo(() => {
-        const currentCategoryData = EMOJI_SECTIONS[activeCategoryIndex]?.data || [];
-        const dataCopy: (EmojiItem | 'PAD_EMPTY_CELL')[] = [...currentCategoryData];
-        const remainder = dataCopy.length % COLUMNS_COUNT;
-        if (remainder !== 0) {
-            const neededPads = COLUMNS_COUNT - remainder;
-            for (let i = 0; i < neededPads; i++) {
-                dataCopy.push('PAD_EMPTY_CELL');
-            }
-        }
-        return dataCopy;
-    }, [activeCategoryIndex]);
 
     const handleScrollToOriginalMessage = useCallback((targetMessageId: string) => {
         const targetIndex = messages.findIndex((msg) => msg.id === targetMessageId);
@@ -203,8 +239,6 @@ export default function ChatScreen({ route, navigation }: any) {
     }, [currentUser?.uid, currentUserRole, roomId]);
 
 
-
-
     const renderMessageItem = useCallback(({ item }: { item: any }) => {
         // 🎯 CREATE A DYNAMIC UNIQUE KEY COMBINATION
         // If the message is soft-deleted, appending '-deleted' breaks FlashList's row cache
@@ -261,6 +295,8 @@ export default function ChatScreen({ route, navigation }: any) {
         } as const;
 
         try {
+            isPickingMedia.current = true;
+
             // 1. Fire the targeted system sheet wrapper based on the user's action sheet selection
             const result = source === 'gallery'
                 ? await launchImageLibrary(options)
@@ -289,8 +325,10 @@ export default function ChatScreen({ route, navigation }: any) {
             // 3. Dispatch the payload downstream directly into your main message handler pipeline!
             // This will automatically trigger the compression engine, hit the PHP endpoint, and log to Firestore.
             await handleSendMessage(customizedMediaEvent);
+            isPickingMedia.current = false;
 
         } catch (pickerError) {
+            isPickingMedia.current = false;
             console.error("Failed executing media pick assembly pipeline handles:", pickerError);
             showAlert({
                 type: 'error',

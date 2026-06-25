@@ -6,6 +6,7 @@ import CalculatorScreen from '../screens/CalculatorScreen';
 import TrackerScreen from '../screens/TrackerScreen';
 import { Calculator, Radar, Wallet } from '../components/HOSIconUI';
 import { scale, verticalScale } from '../utils/scaling';
+import ParentRadarScreen from '../screens/radar/ParentRadarScreen';
 
 const Tab = createBottomTabNavigator();
 

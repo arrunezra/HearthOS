@@ -13,6 +13,11 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
 
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
     <!-- 📷 Optional Camera Hardware Flags for Maximum Play Store Device Compatibility -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
@@ -34,8 +39,9 @@
       android:allowBackup="true"
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="true"
-      android:supportsRtl="true">
-      
+      android:supportsRtl="true"> 
+      <uses-library android:name="org.apache.http.legacy" android:required="false" />
+ 
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"
@@ -49,5 +55,9 @@
             <action android:name="android.intent.action.DOWNLOAD_COMPLETE"/>
         </intent-filter>
       </activity>
+      <service 
+            android:name="com.asterinet.reactnativebackgroundactions.RNBackgroundActionsTask"
+            android:foregroundServiceType="location"
+            android:exported="false" />
     </application>
 </manifest>

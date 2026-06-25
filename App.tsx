@@ -20,6 +20,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import { GiphySDK } from '@giphy/react-native-sdk';
 import { AlertProvider } from './src/context/AlertContext';
 import { CustomProvider } from './src/context/CutomProvider';
+import ParentRadarScreen from './src/screens/radar/ParentRadarScreen';
 export default function App() {
   GiphySDK.configure({ apiKey: '3eYpltnNfxpbEHbBeodZ9EDIId4zVb4B' });
   const [initializing, setInitializing] = useState(true);
@@ -80,6 +81,7 @@ export default function App() {
                   <RootStack.Screen name="UserListScreen" component={UserListScreen} />
                   <RootStack.Screen name="ChatScreen" component={ChatScreen} />
                   <RootStack.Screen name="Settings" component={SettingsScreen} />
+                  <RootStack.Screen name="ParentRadarScreen" component={ParentRadarScreen} />
                 </RootStack.Navigator>
               </NavigationContainer>
             </AlertProvider>
