@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { FlatList, TouchableOpacity } from 'react-native';
-import { collection, doc, getDoc, getFirestore, onSnapshot, query, where } from '@react-native-firebase/firestore';
+import { Alert, FlatList, TouchableOpacity } from 'react-native';
+import { collection, doc, getDoc, getFirestore, onSnapshot, query, where, writeBatch } from '@react-native-firebase/firestore';
 import auth, { getAuth } from '@react-native-firebase/auth';
 import { Box, Text, VStack, HStack } from '@/src/components/HOSGluestackUI';
 import { User, ChevronRight } from 'lucide-react-native';
@@ -15,6 +15,8 @@ interface UserProfile {
 
 export default function UserListScreen({ navigation }: any) {
     const [users, setUsers] = useState<UserProfile[]>([]);
+    const db = getFirestore();
+
     const currentUser = getAuth().currentUser;
     useEffect(() => {
         if (!currentUser) return;
@@ -70,14 +72,50 @@ export default function UserListScreen({ navigation }: any) {
             if (unsubscribeUsers) unsubscribeUsers();
         };
     }, [currentUser]);
+
+    // 🚀 Handle long press selection using high-performance Firestore Atomic Batches
+    const handleSetDefaultUser = (selectedUser: UserProfile) => {
+        Alert.alert(
+            "Set Default User",
+            `Are you sure you want to set ${selectedUser.email.split('@')[0]} as the default room contact?`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Yes, Set Default",
+                    onPress: async () => {
+                        try {
+                            const batch = writeBatch(db);
+
+                            users.forEach((u) => {
+                                const userRef = doc(db, 'users', u.uid);
+                                if (u.uid === selectedUser.uid) {
+                                    batch.update(userRef, { isDefault: true });
+                                } else {
+                                    batch.update(userRef, { isDefault: false });
+                                }
+                            });
+
+                            await batch.commit();
+                            console.log(`Successfully synced default system configuration for UID: ${selectedUser.uid}`);
+                        } catch (err) {
+                            console.error("Failed committing atomic configuration sync batch:", err);
+                            Alert.alert("Database Error", "Failed to update default user rules inside Firestore.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     return (
-        <ScreenContainer showHeader={true} headerTitle="Chats" headerTheme="midnight" showRightIcon={true} rightIconType="close" onRightPress={() => auth().signOut()} scrollable={false}>
+        <ScreenContainer backgroundColor={'#020f09ff'} showHeader={false} scrollable={false}>
             <FlatList
                 data={users}
                 keyExtractor={item => item.uid}
                 contentContainerStyle={{ padding: scale(12) }}
                 renderItem={({ item }) => (
                     <TouchableOpacity
+                        onLongPress={() => handleSetDefaultUser(item)}
                         onPress={() => navigation.navigate('ChatScreen', { targetUser: item })}
                         style={{ padding: scale(14), borderRadius: scale(12), marginBottom: verticalScale(10) }}
                         className="bg-slate-50 border border-slate-100"

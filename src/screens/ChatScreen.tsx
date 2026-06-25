@@ -41,13 +41,12 @@ export default function ChatScreen({ route, navigation }: any) {
     const closeReplyHeader = () => setReplyMessage(null);
     const db = getFirestore(); // Returns the initialized instance configuration target
     const messagesCollection = collection(db, 'rooms', roomId, 'messages');
-    const [currentUserRole, setCurrentUserRole] = useState<'user' | 'admin'>('user');
+    const [currentUserRole, setCurrentUserRole] = useState<'user' | 'admin' | 'default'>('default');
     const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
 
 
     useEffect(() => {
         const db = getFirestore();
-
         // 1. Fetch the user role once when the room changes
         const getUserRole = async () => {
             if (!currentUser?.uid) return;
