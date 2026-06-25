@@ -1,7 +1,7 @@
 // src/screens/CalculatorScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { StatusBar, TouchableOpacity } from 'react-native';
-import { Box, Input, InputField, Text, VStack, HStack, Button, ButtonText } from '../components/HOSGluestackUI';
+import { KeyboardAvoidingView, Platform, StatusBar, TouchableOpacity } from 'react-native';
+import { Box, Input, InputField, Text, VStack, HStack, Button, ButtonText, Switch } from '../components/HOSGluestackUI';
 import { Trash2, Plus } from 'lucide-react-native';
 // 💡 Import your unified screen layout container
 import ScreenContainer from '../components/ScreenContainer';
@@ -15,6 +15,7 @@ interface CalculationItem {
     pricePerKg: number;
     weight: number;
     amount: number;
+    isUnitBased: boolean;
 }
 
 export default function CalculatorScreen() {
@@ -24,21 +25,22 @@ export default function CalculatorScreen() {
     const [liveAmount, setLiveAmount] = useState<string>('0.00');
     const [items, setItems] = useState<CalculationItem[]>([]);
     const navigation = useNavigation<any>();
-
+    const [isUnitWise, setIsUnitWise] = useState(false);
 
 
     // 1. Dynamic real-time preview calculation
     useEffect(() => {
         const p = parseFloat(pricePerKg);
-        const w = parseFloat(weight);
+        const w = parseFloat(weight); // represents weight in grams OR quantity in units
 
         if (!isNaN(p) && !isNaN(w) && w > 0) {
-            const calculatedAmount = (w * p) / 1000;
+            // 🎯 Apply calculation formula conditionally based on the active mode toggle
+            const calculatedAmount = isUnitWise ? (w * p) : ((w * p) / 1000);
             setLiveAmount(calculatedAmount.toFixed(2));
         } else {
             setLiveAmount('0.00');
         }
-    }, [pricePerKg, weight]);
+    }, [pricePerKg, weight, isUnitWise]); // Add isUnitWise to the dependency array
 
     // 2. Add calculated item to history list
     const handleAddItem = () => {
@@ -48,15 +50,16 @@ export default function CalculatorScreen() {
 
         if (isNaN(p) || isNaN(w) || w <= 0 || amt <= 0) return;
 
-        const newItem: CalculationItem = {
+        const newItem = {
             id: Date.now().toString(),
             pricePerKg: p,
             weight: w,
             amount: amt,
+            isUnitBased: isUnitWise // Track mode variant in item profile history if needed
         };
 
         setItems([newItem, ...items]);
-        setWeight(''); // Clean inputs for sequential entries at same price rate
+        setWeight('');
     };
 
     const removeItem = (id: string) => {
@@ -148,7 +151,6 @@ export default function CalculatorScreen() {
             >
                 {/* Subheading Context Selector */}
                 <HStack className="justify-between items-center">
-                    {/* 🎨 FIX: Force text-gray-800 or text-slate-800 */}
                     <TouchableOpacity onLongPress={handleSecretLongPress} delayLongPress={800} activeOpacity={1}>
                         <Text style={{ fontSize: moderateScale(20) }} className="font-extrabold text-slate-800">
                             Basket Calculator
@@ -162,43 +164,41 @@ export default function CalculatorScreen() {
                         </TouchableOpacity>
                     )}
                 </HStack>
-
-                {/* Price per KG Input Field */}
-                <VStack style={{ gap: verticalScale(6) }}>
-                    <Text style={{ fontSize: moderateScale(13) }} className="font-semibold text-slate-500 tracking-wide uppercase">
-                        Price per KG (₹)
-                    </Text>
-                    <Input
-                        variant="underlined"
-                        style={{
-                            height: verticalScale(48),
-                            borderBottomWidth: 2,
-                            borderColor: '#CBD5E1', // Darker gray line for better visibility
-                            alignItems: 'center',
-
+                {/* 🚀 Dynamic Mode Switcher Bar */}
+                <HStack
+                    style={{
+                        padding: scale(12),
+                        borderRadius: scale(12),
+                        marginBottom: verticalScale(14)
+                    }}
+                    className="items-center justify-between bg-slate-100 border border-slate-200"
+                >
+                    <VStack>
+                        <Text style={{ fontSize: moderateScale(14) }} className="font-bold text-slate-800">
+                            Calculation Mode
+                        </Text>
+                        <Text style={{ fontSize: moderateScale(11) }} className="text-slate-500 font-medium">
+                            Active: {isUnitWise ? "Unit Wise Calculation" : "Price per KG Calculation"}
+                        </Text>
+                    </VStack>
+                    <Switch
+                        size='lg'
+                        value={isUnitWise}
+                        onValueChange={(val) => {
+                            setIsUnitWise(val);
+                            setPricePerKg(''); // Reset entries to avoid unexpected value calculation mix-ups
+                            setWeight('');
                         }}
-                    >
-                        <InputField
-                            placeholder="e.g. 120"
-                            keyboardType="numeric"
-                            value={pricePerKg}
-                            onChangeText={setPricePerKg}
-                            placeholderTextColor="#94A3B8"
-                            // 🎨 FIX: Explicitly color the active typing text black/slate
-                            style={{
-                                fontSize: moderateScale(16),
-                                color: '#0F172A',
-                                paddingVertical: verticalScale(6),
+                        trackColor={{ false: '#CBD5E1', true: '#F97316' }}
+                        thumbColor="#FFFFFF"
+                    />
+                </HStack>
 
-                            }}
-                        />
-                    </Input>
-                </VStack>
-
-                {/* Weight Input Field */}
+                {/* Dynamic Primary Input Field */}
                 <VStack style={{ gap: verticalScale(6) }}>
                     <Text style={{ fontSize: moderateScale(13) }} className="font-semibold text-slate-500 tracking-wide uppercase">
-                        Weight (Grams)
+                        {/* 🚀 Dynamic Label text switches automatically */}
+                        {isUnitWise ? "Price per Unit (₹)" : "Price per KG (₹)"}
                     </Text>
                     <Input
                         variant="underlined"
@@ -210,17 +210,45 @@ export default function CalculatorScreen() {
                         }}
                     >
                         <InputField
-                            placeholder="e.g. 250"
+                            placeholder={isUnitWise ? "e.g. 15" : "e.g. 120"}
                             keyboardType="numeric"
-                            value={weight}
-                            onChangeText={setWeight}
+                            value={pricePerKg}
+                            onChangeText={setPricePerKg}
                             placeholderTextColor="#94A3B8"
-                            // 🎨 FIX: Explicitly color the active typing text black/slate
                             style={{
                                 fontSize: moderateScale(16),
                                 color: '#0F172A',
                                 paddingVertical: verticalScale(6),
+                            }}
+                        />
+                    </Input>
+                </VStack>
 
+                {/* Dynamic Secondary Input Field */}
+                <VStack style={{ gap: verticalScale(6) }}>
+                    <Text style={{ fontSize: moderateScale(13) }} className="font-semibold text-slate-500 tracking-wide uppercase">
+                        {/* 🚀 Dynamic Label text switches automatically */}
+                        {isUnitWise ? "Quantity (Units)" : "Weight (Grams)"}
+                    </Text>
+                    <Input
+                        variant="underlined"
+                        style={{
+                            height: verticalScale(48),
+                            borderBottomWidth: 2,
+                            borderColor: '#CBD5E1',
+                            alignItems: 'center',
+                        }}
+                    >
+                        <InputField
+                            placeholder={isUnitWise ? "e.g. 5" : "e.g. 250"}
+                            keyboardType="numeric"
+                            value={weight}
+                            onChangeText={setWeight}
+                            placeholderTextColor="#94A3B8"
+                            style={{
+                                fontSize: moderateScale(16),
+                                color: '#0F172A',
+                                paddingVertical: verticalScale(6),
                             }}
                         />
                     </Input>
@@ -319,44 +347,32 @@ export default function CalculatorScreen() {
                 )}
 
                 {/* Dynamic Calculation Item History List */}
-                {items.length > 0 && (
-                    <VStack style={{ gap: verticalScale(10), marginTop: verticalScale(8) }}>
-                        <Text style={{ fontSize: moderateScale(12) }} className="font-bold text-slate-400 uppercase tracking-wide">
-                            Basket Breakdowns
-                        </Text>
-                        {items.map((item) => (
-                            <HStack
-                                key={item.id}
-                                style={{
-                                    padding: scale(14),
-                                    borderRadius: scale(12),
-                                    gap: scale(8)
-                                }}
-                                className="bg-slate-50 border border-slate-100 justify-between items-center"
-                            >
-                                <VStack style={{ gap: verticalScale(2) }}>
-                                    {/* 🎨 FIX: Force high-contrast slate text colors */}
-                                    <Text style={{ fontSize: moderateScale(15) }} className="font-bold text-slate-800">
-                                        {item.weight}g @ ₹{item.pricePerKg}/kg
-                                    </Text>
-                                    {/* <Text style={{ fontSize: moderateScale(12) }} className="text-slate-400 font-medium">
-                                        ({item.weight} × {item.pricePerKg}) ÷ 1000
-                                    </Text> */}
-                                </VStack>
+                {items.map((item) => (
+                    <HStack
+                        key={item.id}
+                        style={{ padding: scale(14), borderRadius: scale(12), gap: scale(8) }}
+                        className="bg-slate-50 border border-slate-100 justify-between items-center"
+                    >
+                        <VStack style={{ gap: verticalScale(2) }}>
+                            <Text style={{ fontSize: moderateScale(15) }} className="font-bold text-slate-800">
+                                {/* 🚀 Render description formatting dynamically based on recorded entry mode */}
+                                {item.isUnitBased
+                                    ? `${item.weight} Units @ ₹${item.pricePerKg}/unit`
+                                    : `${item.weight}g @ ₹${item.pricePerKg}/kg`
+                                }
+                            </Text>
+                        </VStack>
 
-                                <HStack style={{ gap: scale(12) }} className="items-center">
-                                    {/* 🎨 FIX: Force high-contrast slate text colors */}
-                                    <Text style={{ fontSize: moderateScale(17) }} className="font-black text-slate-900">
-                                        ₹{item.amount.toFixed(2)}
-                                    </Text>
-                                    <TouchableOpacity onPress={() => removeItem(item.id)} hitSlop={10}>
-                                        <Trash2 color="#EF4444" size={moderateScale(18)} />
-                                    </TouchableOpacity>
-                                </HStack>
-                            </HStack>
-                        ))}
-                    </VStack>
-                )}
+                        <HStack style={{ gap: scale(12) }} className="items-center">
+                            <Text style={{ fontSize: moderateScale(17) }} className="font-black text-slate-900">
+                                ₹{item.amount.toFixed(2)}
+                            </Text>
+                            <TouchableOpacity onPress={() => removeItem(item.id)} hitSlop={10}>
+                                <Trash2 color="#EF4444" size={moderateScale(18)} />
+                            </TouchableOpacity>
+                        </HStack>
+                    </HStack>
+                ))}
 
             </VStack>
         </ScreenContainer>
