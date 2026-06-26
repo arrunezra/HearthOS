@@ -23,13 +23,13 @@ import { CustomProvider } from './src/context/CutomProvider';
 import ParentRadarScreen from './src/screens/radar/ParentRadarScreen';
 import TrackerScreen from './src/screens/TrackerScreen';
 export default function App() {
-  GiphySDK.configure({ apiKey: '*****' });
+  GiphySDK.configure({ apiKey: '3eYpltnNfxpbEHbBeodZ9EDIId4zVb4B' });
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
 
   // Configure Google Sign-in inside your root index or here
   GoogleSignin.configure({
-    webClientId: '***', // Get from Firebase Settings
+    webClientId: '450020064775-1mhqiii163mmgnjm0ic4pq7vsb20s37a.apps.googleusercontent.com', // Get from Firebase Settings
     offlineAccess: true,
     scopes: ['profile', 'email']
   });
